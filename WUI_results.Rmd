@@ -1,0 +1,94 @@
+---
+title: "WUI"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Add packages
+```{r}
+library(tidyverse)
+library(here)
+library(janitor)
+library(sf)
+library(arcgisbinding)
+library(raster)
+library(kableExtra)
+```
+
+```{r}
+# load data ---------------------------------------------------------------
+
+# data available from http://silvis.forest.wisc.edu/data/wui-change/
+wui_raw <- read_sf(dsn = here::here("ca_wui_cp12"), layer = 'ca_wui_wgs84_11N') %>% 
+  clean_names() %>% 
+  mutate(id = row_number())
+
+wui_counties_intersect <- read_sf(dsn = here::here("counties_wui_cp12_intersect"), layer = "counties_wui_cp12_intersect") %>% 
+  clean_names() 
+
+ca_counties <- read_sf(dsn = here::here("CA_counties"), layer = "CA_counties_wgs84") %>% 
+  clean_names()
+```
+
+```{r}
+# sub-data-------------------------------------------------------------------
+
+#unite the columns in 1 then filter for wui phrases
+wui_unite <- wui_raw %>% 
+  unite(wui_combined, c(wuiclass90, wuiclass00, wuiclass10), sep = "-", remove = F)
+
+wui <- wui_unite %>% 
+  filter(str_detect(wui_combined, pattern = c("Inermix|Interface"))) %>% 
+  mutate(wuiclass90_simplified = case_when(
+    wuiclass90 %in% c("Low_Dens_Intermix", "Med_Dens_Intermix", "High_Dens_Intermix") ~"Intermix",
+    wuiclass90 %in% c("Low_Dens_Interface", "Med_Dens_Interface", "High_Dens_Interface") ~"Interface",
+    wuiclass90 %in% c("Uninhabited_Veg", "Uninhabited_NoVeg", "Very_Low_Dens_Veg" , "Water", "Very_Low_Dens_NoVeg",
+                      "High_Dens_NoVeg"  , "Med_Dens_NoVeg" , "Low_Dens_NoVeg") ~"Other"
+      )) %>% 
+  mutate(wuiclass00_simplified = case_when(
+    wuiclass00 %in% c("Low_Dens_Intermix", "Med_Dens_Intermix", "High_Dens_Intermix") ~"Intermix",
+    wuiclass00 %in% c("Low_Dens_Interface", "Med_Dens_Interface", "High_Dens_Interface") ~"Interface",
+    wuiclass00 %in% c("Uninhabited_Veg", "Uninhabited_NoVeg", "Very_Low_Dens_Veg" , "Water", "Very_Low_Dens_NoVeg",
+                  "High_Dens_NoVeg"  , "Med_Dens_NoVeg" , "Low_Dens_NoVeg") ~"Other"
+    )) %>% 
+  mutate(wuiclass10_simplified = case_when(
+    wuiclass10 %in% c("Low_Dens_Intermix", "Med_Dens_Intermix", "High_Dens_Intermix") ~"Intermix",
+    wuiclass10 %in% c("Low_Dens_Interface", "Med_Dens_Interface", "High_Dens_Interface") ~"Interface",
+    wuiclass10 %in% c("Uninhabited_Veg", "Uninhabited_NoVeg", "Very_Low_Dens_Veg" , "Water", "Very_Low_Dens_NoVeg",
+                  "High_Dens_NoVeg"  , "Med_Dens_NoVeg" , "Low_Dens_NoVeg") ~"Other"
+
+  ))
+
+```
+
+```{r}
+# count wui acres each county ----------------------------------------------------------------
+wui_90_count <- wui %>% 
+  dplyr::select(wuiclass90_simplified, area_acres) %>% 
+  filter(wuiclass90_simplified %in% c("Interface", "Intermix")) %>% 
+  summarize(wui_area_90 = sum(area_acres)) %>% 
+  st_drop_geometry()
+
+wui_00_count <- wui %>% 
+  dplyr::select(wuiclass00_simplified, area_acres) %>% 
+  filter(wuiclass00_simplified %in% c("Interface", "Intermix")) %>% 
+  summarize(wui_area_00 = sum(area_acres)) %>% 
+  st_drop_geometry()
+
+wui_10_count <- wui_raw %>% 
+  dplyr::select(wuiclass10, area_acres) %>% 
+  filter(str_detect(wuiclass10, pattern = c("Intermix|Interface"))) %>% #161555 polygons` 
+  summarize(wui_area_10 = sum(area_acres)) %>% 
+  st_drop_geometry()
+
+wui_change <- cbind(wui_90_count, wui_00_count, wui_10_count) 
+
+wui_change
+
+```
+
+There was a 4.3% increase in WUI land from 1990 to 2000, a 5.8% increase from 2000 to 2010, and a 10.3% increase from 1990 to 2010. 
+
